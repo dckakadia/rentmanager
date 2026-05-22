@@ -28,7 +28,9 @@ router.get('/', async (req, res) => {
       cutoff_grace_days: 4,
       cutoff_hour: 10,
       cutoff_notify_whatsapp: 1,
-      cutoff_due_threshold: 1000
+      cutoff_due_threshold: 1000,
+      cutoff_date: '',
+      cutoff_time: '23:00'
     };
 
     res.json({
@@ -61,7 +63,9 @@ router.patch('/', async (req, res) => {
       cutoff_grace_days,
       cutoff_hour,
       cutoff_notify_whatsapp,
-      cutoff_due_threshold
+      cutoff_due_threshold,
+      cutoff_date,
+      cutoff_time
     } = req.body;
     
     await pool.query(
@@ -73,6 +77,8 @@ router.patch('/', async (req, res) => {
            cutoff_hour = COALESCE($5, cutoff_hour),
            cutoff_notify_whatsapp = COALESCE($6, cutoff_notify_whatsapp),
            cutoff_due_threshold = COALESCE($7, cutoff_due_threshold),
+           cutoff_date = COALESCE($8, cutoff_date),
+           cutoff_time = COALESCE($9, cutoff_time),
            updated_at = CURRENT_TIMESTAMP
        WHERE id = 1`,
       [
@@ -82,7 +88,9 @@ router.patch('/', async (req, res) => {
         cutoff_grace_days, 
         cutoff_hour, 
         cutoff_notify_whatsapp,
-        cutoff_due_threshold
+        cutoff_due_threshold,
+        cutoff_date,
+        cutoff_time
       ]
     );
 

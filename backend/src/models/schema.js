@@ -33,6 +33,14 @@ async function initializeDatabase() {
       await pool.query('ALTER TABLE settings ADD COLUMN cutoff_due_threshold INTEGER DEFAULT 1000');
       console.log('✓ Migration: Added cutoff_due_threshold to settings table');
     } catch (e) {}
+    try {
+      await pool.query("ALTER TABLE settings ADD COLUMN cutoff_date TEXT DEFAULT ''");
+      console.log('✓ Migration: Added cutoff_date to settings table');
+    } catch (e) {}
+    try {
+      await pool.query("ALTER TABLE settings ADD COLUMN cutoff_time TEXT DEFAULT '23:00'");
+      console.log('✓ Migration: Added cutoff_time to settings table');
+    } catch (e) {}
 
     // Migration: create transactions table if it doesn't already exist (handled by CREATE TABLE IF NOT EXISTS below)
 
@@ -177,14 +185,16 @@ async function initializeDatabase() {
         cutoff_hour INTEGER DEFAULT 10,
         cutoff_notify_whatsapp INTEGER DEFAULT 1,
         cutoff_due_threshold INTEGER DEFAULT 1000,
+        cutoff_date TEXT DEFAULT '',
+        cutoff_time TEXT DEFAULT '23:00',
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
       );
     `);
     
     // Initialize default settings if not exists
     await pool.query(`
-      INSERT OR IGNORE INTO settings (id, admin_name, admin_phone, auto_cutoff_enabled, cutoff_grace_days, cutoff_hour, cutoff_notify_whatsapp, cutoff_due_threshold)
-      VALUES (1, 'Admin Owner', '', 0, 4, 10, 1, 1000);
+      INSERT OR IGNORE INTO settings (id, admin_name, admin_phone, auto_cutoff_enabled, cutoff_grace_days, cutoff_hour, cutoff_notify_whatsapp, cutoff_due_threshold, cutoff_date, cutoff_time)
+      VALUES (1, 'Admin Owner', '', 0, 4, 10, 1, 1000, '', '23:00');
     `);
     console.log('✓ Settings table created and initialized');
 

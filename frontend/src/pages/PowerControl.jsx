@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { getPowerStatus, turnPowerOn, turnPowerOff, testRelay, getSettings, updateSettings, triggerOverdueCutoff, getOverdueCutoffCandidates, getRetryLogs } from '../services/api';
-import { Zap, AlertTriangle, ShieldCheck, Clock, RefreshCw, CheckCircle2, XCircle, Play, Settings2 } from 'lucide-react';
+import { Zap, AlertTriangle, ShieldCheck, Clock, RefreshCw, CalendarDays, Play, Settings2 } from 'lucide-react';
 
 export default function PowerControl() {
   const [properties, setProperties] = useState([]);
@@ -302,7 +302,7 @@ export default function PowerControl() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         
-        {/* Automation Settings */}
+        {/* Cutoff Schedule — Manual Date & Time Picker */}
         <div className="lg:col-span-1">
           <div className="card h-full bg-white border border-gray-100 shadow-xl shadow-blue-900/5 overflow-hidden">
             <div className="p-6 border-b border-gray-50 bg-gray-50/50">
@@ -311,116 +311,95 @@ export default function PowerControl() {
                 Trigger Logic
               </h2>
             </div>
-            <div className="p-6 space-y-8">
-              
-              <div className="flex flex-col gap-4">
-                <button 
-                  onClick={handleManualCutoff}
-                  disabled={cuttingOff}
-                  className={`w-full py-4 rounded-2xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-3 transition-all shadow-lg ${
-                    cuttingOff 
-                      ? 'bg-gray-100 text-gray-400' 
-                      : 'bg-rose-600 text-white hover:bg-rose-700 shadow-rose-200 active:scale-[0.98]'
-                  }`}
-                >
-                  {cuttingOff ? (
-                    <RefreshCw className="animate-spin" size={20} />
-                  ) : (
-                    <AlertTriangle size={20} />
-                  )}
-                  {cuttingOff ? 'Processing Cutoffs...' : 'Cutoff Overdue Units Now'}
-                </button>
+            <div className="p-6 space-y-6">
+
+              {/* Fire cutoff button */}
+              <button
+                onClick={handleManualCutoff}
+                disabled={cuttingOff}
+                className={`w-full py-4 rounded-2xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-3 transition-all shadow-lg ${
+                  cuttingOff
+                    ? 'bg-gray-100 text-gray-400'
+                    : 'bg-rose-600 text-white hover:bg-rose-700 shadow-rose-200 active:scale-[0.98]'
+                }`}
+              >
+                {cuttingOff ? <RefreshCw className="animate-spin" size={20} /> : <AlertTriangle size={20} />}
+                {cuttingOff ? 'Processing Cutoffs...' : 'Cutoff Overdue Units Now'}
+              </button>
+
+              {/* Divider */}
+              <div className="flex items-center gap-3">
+                <div className="flex-1 h-px bg-gray-100" />
+                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Cutoff Reference Point</span>
+                <div className="flex-1 h-px bg-gray-100" />
               </div>
 
-              <div className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl border border-gray-100">
-                <div>
-                  <p className="font-black text-gray-900 text-sm">Auto Power Cutoff</p>
-                  <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Automatic triggering</p>
-                </div>
-                <button 
-                  onClick={() => handlePendingUpdate('auto_cutoff_enabled', pendingSettings.auto_cutoff_enabled ? 0 : 1)}
-                  className={`w-14 h-8 rounded-full relative transition-all duration-300 ${pendingSettings.auto_cutoff_enabled ? 'bg-blue-600' : 'bg-gray-300'}`}
-                >
-                  <div className={`absolute top-1 w-6 h-6 bg-white rounded-full transition-all duration-300 ${pendingSettings.auto_cutoff_enabled ? 'left-7' : 'left-1 shadow-sm'}`} />
-                </button>
-              </div>
-
+              {/* Date picker */}
               <div>
-                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">Auto-Cutoff Day of Month (1-31)</label>
-                <div className="flex items-center gap-4">
-                  <input 
-                    type="range" 
-                    min="1" 
-                    max="31" 
-                    value={pendingSettings.cutoff_grace_days}
-                    onChange={(e) => handlePendingUpdate('cutoff_grace_days', parseInt(e.target.value))}
-                    className="flex-1 accent-blue-600"
-                  />
-                  <span className="w-12 h-12 bg-blue-50 text-blue-700 rounded-xl flex items-center justify-center font-black text-lg border border-blue-100">
-                    {pendingSettings.cutoff_grace_days}
-                  </span>
-                </div>
-                <p className="text-[10px] text-gray-400 font-bold mt-2 italic">Select the calendar day (1-31) when unpaid units are automatically cut off.</p>
+                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3 flex items-center gap-2">
+                  <CalendarDays size={14} />
+                  Cutoff Date
+                </label>
+                <input
+                  id="cutoff-date-input"
+                  type="date"
+                  value={pendingSettings.cutoff_date || ''}
+                  onChange={(e) => handlePendingUpdate('cutoff_date', e.target.value)}
+                  className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl font-black text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+                />
               </div>
 
+              {/* Time picker */}
               <div>
-                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">Trigger Hour</label>
-                <select 
-                  value={pendingSettings.cutoff_hour}
-                  onChange={(e) => handlePendingUpdate('cutoff_hour', parseInt(e.target.value))}
-                  className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl font-black text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none"
-                >
-                  <option value={7}>07:00 AM</option>
-                  <option value={8}>08:00 AM</option>
-                  <option value={9}>09:00 AM</option>
-                  <option value={10}>10:00 AM</option>
-                  <option value={11}>11:00 AM</option>
-                  <option value={12}>12:00 PM</option>
-                  <option value={13}>01:00 PM</option>
-                  <option value={14}>02:00 PM</option>
-                  <option value={15}>03:00 PM</option>
-                  <option value={16}>04:00 PM</option>
-                  <option value={17}>05:00 PM</option>
-                  <option value={18}>06:00 PM</option>
-                  <option value={19}>07:00 PM</option>
-                  <option value={20}>08:00 PM</option>
-                  <option value={21}>09:00 PM</option>
-                  <option value={22}>10:00 PM</option>
-                  <option value={23}>11:00 PM</option>
-                  <option value={0}>12:00 AM (Midnight)</option>
-                </select>
+                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3 flex items-center gap-2">
+                  <Clock size={14} />
+                  Cutoff Time
+                </label>
+                <input
+                  id="cutoff-time-input"
+                  type="time"
+                  value={pendingSettings.cutoff_time || '23:00'}
+                  onChange={(e) => handlePendingUpdate('cutoff_time', e.target.value)}
+                  className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl font-black text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+                />
               </div>
 
-              <div className="p-4 bg-amber-50 rounded-2xl border border-amber-100 flex gap-4">
-                <Clock className="text-amber-600 shrink-0" size={24} />
-                <div>
-                  <p className="text-xs font-black text-amber-900 uppercase tracking-tight">System Notice</p>
-                  <p className="text-[11px] text-amber-700 font-bold leading-relaxed mt-1">
-                    Automated cutoffs occur only on the selected calendar day at the specified trigger hour for all units with outstanding dues.
-                  </p>
+              {/* Current saved value display */}
+              {settings?.cutoff_date && (
+                <div className="p-4 bg-blue-50 rounded-2xl border border-blue-100 flex gap-3 items-start">
+                  <ShieldCheck className="text-blue-500 shrink-0 mt-0.5" size={18} />
+                  <div>
+                    <p className="text-[10px] font-black text-blue-900 uppercase tracking-tight">Saved Cutoff Point</p>
+                    <p className="text-sm font-black text-blue-700 mt-1">
+                      {new Date(`${settings.cutoff_date}T${settings.cutoff_time || '23:00'}`).toLocaleString('en-IN', {
+                        day: '2-digit', month: 'short', year: 'numeric',
+                        hour: '2-digit', minute: '2-digit', hour12: true
+                      })}
+                    </p>
+                    <p className="text-[10px] text-blue-500 font-bold mt-1 leading-relaxed">
+                      Units with dues before this point will be flagged for cutoff when you press the button above.
+                    </p>
+                  </div>
                 </div>
-              </div>
+              )}
 
-              <div className="pt-4 border-t border-gray-100 flex gap-3">
-                <button 
+              {/* Save & revert */}
+              <div className="pt-2 border-t border-gray-100 flex gap-3">
+                <button
                   onClick={handleSaveSettings}
                   disabled={saving}
                   className={`flex-1 py-4 rounded-2xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-3 transition-all shadow-lg ${
-                    saving 
-                      ? 'bg-gray-100 text-gray-400' 
+                    saving
+                      ? 'bg-gray-100 text-gray-400'
                       : 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-emerald-200 active:scale-[0.98]'
                   }`}
                 >
-                  {saving ? (
-                    <RefreshCw className="animate-spin" size={20} />
-                  ) : (
-                    <ShieldCheck size={20} />
-                  )}
-                  {saving ? 'Saving...' : 'Save Automation Settings'}
+                  {saving ? <RefreshCw className="animate-spin" size={20} /> : <ShieldCheck size={20} />}
+                  {saving ? 'Saving...' : 'Save Cutoff Date & Time'}
                 </button>
-                
+
                 {JSON.stringify(settings) !== JSON.stringify(pendingSettings) && (
-                  <button 
+                  <button
                     onClick={() => setPendingSettings(settings)}
                     className="p-4 bg-gray-100 text-gray-400 rounded-2xl hover:bg-gray-200 transition-all"
                     title="Revert Changes"

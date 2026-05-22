@@ -364,20 +364,39 @@ export default function PowerControl() {
                 />
               </div>
 
+              {/* Threshold picker */}
+              <div>
+                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3 flex items-center gap-2">
+                  <AlertTriangle size={14} />
+                  Cutoff Threshold Amount (₹)
+                </label>
+                <input
+                  id="cutoff-threshold-input"
+                  type="number"
+                  min="0"
+                  value={pendingSettings.cutoff_due_threshold ?? 1000}
+                  onChange={(e) => handlePendingUpdate('cutoff_due_threshold', e.target.value ? parseInt(e.target.value, 10) : 0)}
+                  className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl font-black text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+                />
+              </div>
+
               {/* Current saved value display */}
               {settings?.cutoff_date && (
                 <div className="p-4 bg-blue-50 rounded-2xl border border-blue-100 flex gap-3 items-start">
                   <ShieldCheck className="text-blue-500 shrink-0 mt-0.5" size={18} />
                   <div>
-                    <p className="text-[10px] font-black text-blue-900 uppercase tracking-tight">Saved Cutoff Point</p>
+                    <p className="text-[10px] font-black text-blue-900 uppercase tracking-tight">Saved Cutoff Point & Threshold</p>
                     <p className="text-sm font-black text-blue-700 mt-1">
                       {new Date(`${settings.cutoff_date}T${settings.cutoff_time || '23:00'}`).toLocaleString('en-IN', {
                         day: '2-digit', month: 'short', year: 'numeric',
                         hour: '2-digit', minute: '2-digit', hour12: true
                       })}
                     </p>
+                    <p className="text-sm font-black text-rose-600 mt-1">
+                      Threshold: ₹{settings.cutoff_due_threshold?.toLocaleString() || '0'}
+                    </p>
                     <p className="text-[10px] text-blue-500 font-bold mt-1 leading-relaxed">
-                      Units with dues before this point will be flagged for cutoff when you press the button above.
+                      Only units with dues greater than or equal to ₹{settings.cutoff_due_threshold?.toLocaleString() || '0'} will be flagged for cutoff when you press the button above.
                     </p>
                   </div>
                 </div>

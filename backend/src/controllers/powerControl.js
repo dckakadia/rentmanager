@@ -34,8 +34,10 @@ async function getOverdueCutoffCandidates(settings, date = new Date()) {
     return [];
   }
 
+  const threshold = settings?.cutoff_due_threshold !== undefined ? Number(settings.cutoff_due_threshold) : 0;
+
   // The true source of due amount is the Tenant's Ledger (transactions table).
-  // A tenant is ONLY overdue if their latest running_balance > 0.
+  // A tenant is ONLY overdue if their latest running_balance >= threshold.
   const res = await pool.query(`
     SELECT 
       p.id as property_id, 
@@ -49,8 +51,8 @@ async function getOverdueCutoffCandidates(settings, date = new Date()) {
     JOIN tenants t ON p.id = t.property_id
     WHERE p.is_occupied = 1
       AND t.skip_auto_cutoff = 0
-      AND (SELECT running_balance FROM transactions WHERE tenant_id = t.id ORDER BY date DESC, id DESC LIMIT 1) > 0
-  `);
+      AND (SELECT running_balance FROM transactions WHERE tenant_id = t.id ORDER BY date DESC, id DESC LIMIT 1) >= $1
+  `, [threshold]);
 
   const candidates = res.rows
     .filter(row => {

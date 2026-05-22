@@ -34,49 +34,17 @@ async function getOverdueCutoffCandidates(settings, date = new Date()) {
     return [];
   }
 
-  // 1) Primary: find overdue via rent_payments table
-  const rpRes = await pool.query(`
-      SELECT
-        p.id,
-        p.room_number,
-        t.id as tenant_id,
-        t.name,
-        t.phone,
-        MIN(rp.month_year) AS oldest_month_year,
-        GROUP_CONCAT(rp.month_year, ', ') AS month_years,
-        SUM(rp.total_due - COALESCE(rp.amount_paid, 0)) AS pending_amount
-      FROM properties p
-      JOIN tenants t ON p.id = t.property_id
-      JOIN rent_payments rp ON p.id = rp.property_id
-      WHERE p.is_occupied = 1
-        AND t.skip_auto_cutoff = 0
-        AND rp.payment_status IN ('pending', 'partial')
-      GROUP BY p.id, p.room_number, t.id, t.name, t.phone
-      HAVING SUM(rp.total_due - COALESCE(rp.amount_paid, 0)) > 0
-    `);
-
-  const candidates = rpRes.rows
-    .filter(row => {
-      if (!row.id || !row.tenant_id || !row.name) {
-        console.warn(`[POWER CONTROL] Skipping invalid row:`, row);
-        return false;
-      }
-      return true;
-    })
-    .map(row => ({
-      property_id: row.id,
-      tenant_id: row.tenant_id,
-      room_number: row.room_number,
-      tenant_name: row.name,
-      phone: row.phone,
-      month_year: row.month_years,
-      pending_amount: row.pending_amount
-    }));
-
-  // 2) Fallback: include properties where the ledger running_balance > 0
-  const ledgerRes = await pool.query(`
-    SELECT p.id, p.room_number, t.id as tenant_id, t.name, t.phone,
-      (SELECT running_balance FROM transactions WHERE tenant_id = t.id ORDER BY date DESC, id DESC LIMIT 1) as ledger_balance
+  // The true source of due amount is the Tenant's Ledger (transactions table).
+  // A tenant is ONLY overdue if their latest running_balance > 0.
+  const res = await pool.query(`
+    SELECT 
+      p.id as property_id, 
+      p.room_number, 
+      t.id as tenant_id, 
+      t.name as tenant_name, 
+      t.phone,
+      (SELECT running_balance FROM transactions WHERE tenant_id = t.id ORDER BY date DESC, id DESC LIMIT 1) as pending_amount,
+      (SELECT GROUP_CONCAT(month_year, ', ') FROM rent_payments WHERE property_id = p.id AND payment_status IN ('pending', 'partial')) as month_year
     FROM properties p
     JOIN tenants t ON p.id = t.property_id
     WHERE p.is_occupied = 1
@@ -84,23 +52,23 @@ async function getOverdueCutoffCandidates(settings, date = new Date()) {
       AND (SELECT running_balance FROM transactions WHERE tenant_id = t.id ORDER BY date DESC, id DESC LIMIT 1) > 0
   `);
 
-  for (const row of ledgerRes.rows) {
-    if (!row.id || !row.tenant_id || !row.name) {
-      console.warn(`[POWER CONTROL] Skipping invalid ledger row:`, row);
-      continue;
-    }
-    if (!candidates.find(c => c.property_id === row.id)) {
-      candidates.push({
-        property_id: row.id,
-        tenant_id: row.tenant_id,
-        room_number: row.room_number,
-        tenant_name: row.name,
-        phone: row.phone,
-        month_year: null,
-        pending_amount: row.ledger_balance
-      });
-    }
-  }
+  const candidates = res.rows
+    .filter(row => {
+      if (!row.property_id || !row.tenant_id || !row.tenant_name) {
+        console.warn(`[POWER CONTROL] Skipping invalid row:`, row);
+        return false;
+      }
+      return true;
+    })
+    .map(row => ({
+      property_id: row.property_id,
+      tenant_id: row.tenant_id,
+      room_number: row.room_number,
+      tenant_name: row.tenant_name,
+      phone: row.phone,
+      month_year: row.month_year || 'Ledger Balance',
+      pending_amount: row.pending_amount
+    }));
 
   return candidates;
 }

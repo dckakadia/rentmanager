@@ -22,13 +22,19 @@ const homeAssistant = require('../config/homeAssistant');
  */
 
 async function getOverdueCutoffCandidates(settings, date = new Date()) {
-  const currentDay = date.getDate();
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const monthYear = `${year}-${month}`;
-  const graceDays = settings?.cutoff_grace_days ?? 0;
+  // If manual cutoff date/time isn't set, do nothing
+  if (!settings?.cutoff_date || !settings?.cutoff_time) {
+    return [];
+  }
 
-  // 1) Primary: find overdue via rent_payments table (by month logic)
+  const cutoffDateTime = new Date(`${settings.cutoff_date}T${settings.cutoff_time}`);
+  
+  // If the current date/time hasn't reached the cutoff point, no one gets cut off
+  if (isNaN(cutoffDateTime.getTime()) || date < cutoffDateTime) {
+    return [];
+  }
+
+  // 1) Primary: find overdue via rent_payments table
   const rpRes = await pool.query(`
       SELECT
         p.id,
@@ -45,19 +51,12 @@ async function getOverdueCutoffCandidates(settings, date = new Date()) {
       WHERE p.is_occupied = 1
         AND t.skip_auto_cutoff = 0
         AND rp.payment_status IN ('pending', 'partial')
-        AND (
-          rp.month_year < $1
-          OR 
-          (rp.month_year = $1 AND $2 > (t.committed_payment_date + $3))
-        )
       GROUP BY p.id, p.room_number, t.id, t.name, t.phone
       HAVING SUM(rp.total_due - COALESCE(rp.amount_paid, 0)) > 0
-    `, [monthYear, currentDay, graceDays]);
+    `);
 
-  // BUG#3 FIX: Validate each row before adding to candidates
   const candidates = rpRes.rows
     .filter(row => {
-      // Validate required fields
       if (!row.id || !row.tenant_id || !row.name) {
         console.warn(`[POWER CONTROL] Skipping invalid row:`, row);
         return false;
@@ -75,7 +74,6 @@ async function getOverdueCutoffCandidates(settings, date = new Date()) {
     }));
 
   // 2) Fallback: include properties where the ledger running_balance > 0
-  // This covers cases where transactions exist but rent_payments rows are missing.
   const ledgerRes = await pool.query(`
     SELECT p.id, p.room_number, t.id as tenant_id, t.name, t.phone,
       (SELECT running_balance FROM transactions WHERE tenant_id = t.id ORDER BY date DESC, id DESC LIMIT 1) as ledger_balance
@@ -86,13 +84,11 @@ async function getOverdueCutoffCandidates(settings, date = new Date()) {
       AND (SELECT running_balance FROM transactions WHERE tenant_id = t.id ORDER BY date DESC, id DESC LIMIT 1) > 0
   `);
 
-  // BUG#3 FIX: Validate ledger results too
   for (const row of ledgerRes.rows) {
     if (!row.id || !row.tenant_id || !row.name) {
       console.warn(`[POWER CONTROL] Skipping invalid ledger row:`, row);
       continue;
     }
-    // Skip if already present from rent_payments result
     if (!candidates.find(c => c.property_id === row.id)) {
       candidates.push({
         property_id: row.id,

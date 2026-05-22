@@ -3,6 +3,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const cookieParser = require('cookie-parser');
 
 const propertiesRouter = require('./src/controllers/properties');
 const tenantsRouter = require('./src/controllers/tenants');
@@ -16,27 +17,34 @@ const whatsappRouter = require('./src/controllers/whatsapp');
 const diagnosticsRouter = require('./src/controllers/diagnostics');
 const transactionsRouter = require('./src/controllers/transactions');
 const billsRouter = require('./src/controllers/bills');
+const authController = require('./src/controllers/auth');
 
-const { verifyAdminToken } = require('./src/middleware/auth');
+const { requireLogin } = require('./src/middleware/auth');
 const { errorHandler } = require('./src/middleware/validation');
 
 const app = express();
 
-app.use(cors());
+app.use(cors({ credentials: true, origin: true }));
+app.use(cookieParser());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-console.log('\n[INFO] API Authentication Status:');
-console.log('- If ADMIN_TOKEN is set in environment: All endpoints require token');
-console.log('- If ADMIN_TOKEN is not set: Using default token (CHANGE FOR PRODUCTION)');
-console.log('- Set ADMIN_TOKEN in .env file for production security\n');
+// ── Public routes (no login required) ────────────────────────────────────────
 
-if (process.env.REQUIRE_AUTH === 'true') {
-  app.use('/api/', verifyAdminToken);
-  console.log('[SECURITY] API authentication ENABLED');
-} else {
-  console.log('[WARNING] API authentication DISABLED - for development only');
-}
+// Auth endpoints: login, logout, me — always public (no requireLogin)
+app.post('/api/auth/login', authController.login);
+app.post('/api/auth/logout', authController.logout);
+app.get('/api/auth/me', authController.me);
+
+// Health check — always public
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'OK', timestamp: new Date() });
+});
+
+// ── Protected routes (login required) ────────────────────────────────────────
+// All /api/* routes below this line require a valid session cookie.
+
+app.use('/api/', requireLogin);
 
 app.use('/api/properties', propertiesRouter);
 app.use('/api/tenants', tenantsRouter);
@@ -51,14 +59,13 @@ app.use('/api/diagnostics', diagnosticsRouter);
 app.use('/api/transactions', transactionsRouter);
 app.use('/api/bills', billsRouter);
 
-app.use(express.static(path.join(__dirname, '../frontend/dist')));
+// ── Static frontend & catch-all ───────────────────────────────────────────────
 
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'OK', timestamp: new Date() });
-});
+app.use(express.static(path.join(__dirname, '../frontend/dist')));
 
 app.use(errorHandler);
 
+// Catch-all: serve React app for any non-API path (React Router handles /login, /, etc.)
 app.get('*', (req, res) => {
   if (!req.path.startsWith('/api')) {
     res.sendFile(path.join(__dirname, '../frontend/dist/index.html'));

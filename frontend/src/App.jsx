@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter, Routes, Route, Link, useLocation } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Link, useLocation, useNavigate, Navigate } from 'react-router-dom';
 import Dashboard from './pages/Dashboard';
 import Properties from './pages/Properties';
 import PropertyDetail from './pages/PropertyDetail';
@@ -10,7 +10,9 @@ import Settings from './pages/Settings';
 import MeterReadings from './pages/MeterReadings';
 import PowerControl from './pages/PowerControl';
 import BillGeneration from './pages/BillGeneration';
-import { Menu, Home, Users, CreditCard, PieChart, Building2, Bell, Search, Settings as SettingsIcon, Zap, Receipt } from 'lucide-react';
+import Login from './pages/Login';
+import ProtectedRoute from './components/ProtectedRoute';
+import { Menu, Home, Users, CreditCard, PieChart, Building2, Bell, Settings as SettingsIcon, Zap, Receipt, LogOut } from 'lucide-react';
 import './styles/globals.css';
 
 function SidebarLink({ to, icon: Icon, children }) {
@@ -33,11 +35,12 @@ function SidebarLink({ to, icon: Icon, children }) {
 }
 
 function AppContent() {
+  const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = React.useState(false);
   const [adminName, setAdminName] = React.useState('Admin Owner');
 
   React.useEffect(() => {
-    fetch('/api/settings')
+    fetch('/api/settings', { credentials: 'include' })
       .then(res => res.json())
       .then(data => {
         if (data.system && data.system.admin_name) {
@@ -47,6 +50,18 @@ function AppContent() {
       .catch(err => console.error('Failed to fetch settings in App:', err));
   }, []);
 
+  async function handleLogout() {
+    try {
+      await fetch('/api/auth/logout', {
+        method: 'POST',
+        credentials: 'include',
+      });
+    } catch {
+      // Even if request fails, redirect to login
+    }
+    navigate('/login', { replace: true });
+  }
+
   return (
     <div className="flex h-screen bg-gray-50 font-sans selection:bg-blue-100 selection:text-blue-900">
       {/* Sidebar */}
@@ -54,7 +69,7 @@ function AppContent() {
         fixed inset-y-0 left-0 z-50 w-72 bg-gray-900 text-white p-6 
         ${menuOpen ? 'translate-x-0' : '-translate-x-full'} 
         md:relative md:translate-x-0 transition-transform duration-300 ease-in-out
-        border-r border-gray-800
+        border-r border-gray-800 flex flex-col
       `}>
         <div className="flex items-center gap-3 mb-10 px-4">
           <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/20">
@@ -63,7 +78,7 @@ function AppContent() {
           <h1 className="text-xl font-black tracking-tighter">RentManager <span className="text-blue-500 text-xs">v1.0</span></h1>
         </div>
 
-        <nav className="space-y-2">
+        <nav className="space-y-2 flex-1">
           <p className="px-4 text-[10px] font-black text-gray-500 uppercase tracking-[0.2em] mb-4">Main Menu</p>
           <SidebarLink to="/" icon={PieChart}>Dashboard</SidebarLink>
           <SidebarLink to="/properties" icon={Home}>Properties</SidebarLink>
@@ -76,16 +91,25 @@ function AppContent() {
           <SidebarLink to="/settings" icon={SettingsIcon}>Settings</SidebarLink>
         </nav>
 
-        <div className="absolute bottom-8 left-6 right-6">
-          <div className="bg-gray-800/50 rounded-2xl p-4 border border-gray-700/50">
-            <p className="text-xs font-bold text-gray-400 mb-2">Storage Usage</p>
-            <div className="w-full bg-gray-700 rounded-full h-1.5 mb-3">
-              <div className="bg-blue-500 h-1.5 rounded-full w-[65%]"></div>
+        {/* Bottom: user info + logout */}
+        <div className="mt-auto pt-6 border-t border-gray-800">
+          <div className="flex items-center gap-3 px-2 mb-4">
+            <div className="w-9 h-9 bg-gradient-to-tr from-blue-600 to-indigo-600 rounded-xl flex items-center justify-center text-white font-black text-sm shadow-lg shadow-blue-900/40 flex-shrink-0">
+              {adminName.charAt(0).toUpperCase()}
             </div>
-            <button className="w-full py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-[10px] font-black uppercase tracking-wider transition-colors">
-              Upgrade Plan
-            </button>
+            <div className="min-w-0">
+              <p className="text-sm font-black text-white truncate">{adminName}</p>
+              <p className="text-[10px] font-bold text-emerald-500 uppercase tracking-wider">Admin</p>
+            </div>
           </div>
+          <button
+            id="logout-button"
+            onClick={handleLogout}
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-gray-400 hover:bg-red-500/10 hover:text-red-400 transition-all duration-200 group"
+          >
+            <LogOut size={18} className="text-gray-500 group-hover:text-red-400 transition-colors" />
+            <span className="font-bold text-sm tracking-wide">Sign Out</span>
+          </button>
         </div>
       </div>
 
@@ -116,7 +140,7 @@ function AppContent() {
                 <p className="text-[10px] font-bold text-emerald-500 uppercase">Verified Account</p>
               </div>
               <div className="w-10 h-10 bg-gradient-to-tr from-blue-600 to-indigo-600 rounded-xl flex items-center justify-center text-white font-black shadow-lg shadow-blue-200">
-                {adminName.charAt(0)}
+                {adminName.charAt(0).toUpperCase()}
               </div>
             </div>
           </div>
@@ -145,7 +169,20 @@ function AppContent() {
 function App() {
   return (
     <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-      <AppContent />
+      <Routes>
+        {/* Public route — no auth required */}
+        <Route path="/login" element={<Login />} />
+
+        {/* All other routes — require login */}
+        <Route
+          path="/*"
+          element={
+            <ProtectedRoute>
+              <AppContent />
+            </ProtectedRoute>
+          }
+        />
+      </Routes>
     </BrowserRouter>
   );
 }

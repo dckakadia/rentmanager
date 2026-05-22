@@ -2,8 +2,26 @@ import axios from 'axios';
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE || '/api',
-  headers: { 'Content-Type': 'application/json' }
+  headers: { 'Content-Type': 'application/json' },
+  withCredentials: true,  // Send auth cookie on every request
 });
+
+// ── Auth ──────────────────────────────────────────────────────────────────────
+export const loginUser = (username, password) =>
+  fetch('/api/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ username, password }),
+  }).then(r => r.json());
+
+export const logoutUser = () =>
+  fetch('/api/auth/logout', { method: 'POST', credentials: 'include' }).then(r => r.json());
+
+export const getMe = () =>
+  fetch('/api/auth/me', { credentials: 'include' }).then(r => r.json());
+
+
 
 // Simple sleep helper
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));

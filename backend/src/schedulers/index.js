@@ -66,45 +66,42 @@ function rentReminderScheduler() {
 }
 
 /**
- * Scheduler 2: Dynamic Power Cutoff (Runs every hour to check conditions)
+ * Scheduler 2: Dynamic Power Cutoff (Runs every minute to check exact time match)
  */
 function powerCutoffScheduler() {
-  // Cron: 0 * * * * (Every hour at minute 0)
-  const job = cron.schedule('0 * * * *', async () => {
+  // Cron: * * * * * (Every minute)
+  const job = cron.schedule('* * * * *', async () => {
     try {
       // 1. Get settings
       const settingsRes = await pool.query('SELECT * FROM settings WHERE id = 1');
       const settings = settingsRes.rows[0];
 
-      if (!settings || !settings.auto_cutoff_enabled) {
-        return; // Auto-cutoff is disabled
+      if (!settings || !settings.cutoff_date || !settings.cutoff_time) {
+        return; // Cutoff point not set
       }
 
-      // Use IST-aware time (server may be UTC — cron fires correctly via timezone option,
-      // but new Date() needs explicit locale parsing to match IST hour)
+      // Use IST-aware time
       const nowIST = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
-      const currentHour = nowIST.getHours();
-      if (currentHour !== settings.cutoff_hour) {
-        return; // Not the right hour to trigger cutoff
+      
+      const currentDay = String(nowIST.getDate()).padStart(2, '0');
+      const currentMonth = String(nowIST.getMonth() + 1).padStart(2, '0');
+      const currentYear = nowIST.getFullYear();
+      const currentDateStr = `${currentYear}-${currentMonth}-${currentDay}`;
+      
+      const currentHour = String(nowIST.getHours()).padStart(2, '0');
+      const currentMinute = String(nowIST.getMinutes()).padStart(2, '0');
+      const currentTimeStr = `${currentHour}:${currentMinute}`;
+
+      if (settings.cutoff_date !== currentDateStr || settings.cutoff_time !== currentTimeStr) {
+        return; // Only trigger on the exact minute
       }
 
-      console.log(`[Scheduler] Running fixed-date power cutoff check (Target Day: ${settings.cutoff_grace_days}, Target Hour: ${settings.cutoff_hour})...`);
+      console.log(`[Scheduler] Global cutoff time reached (${currentDateStr} ${currentTimeStr}). Running cutoff sweep...`);
 
-      // 2. Identify tenants who are past the fixed cutoff date (use IST date)
-      const d = nowIST;
-      const currentDay = d.getDate();
-      const year = d.getFullYear();
-      const month = String(d.getMonth() + 1).padStart(2, '0');
-      const monthYear = `${year}-${month}`;
-
-      const result = await pool.query(`
+      // 2. Identify tenants who are overdue
+      const rpRes = await pool.query(`
         SELECT
-          p.id,
-          p.room_number,
-          t.name,
-          t.phone,
-          MIN(rp.month_year) AS oldest_month_year,
-          GROUP_CONCAT(rp.month_year, ', ') AS month_years,
+          p.id, p.room_number, t.id as tenant_id, t.name, t.phone,
           SUM(rp.total_due - COALESCE(rp.amount_paid, 0)) AS pending_amount
         FROM properties p
         JOIN tenants t ON p.id = t.property_id
@@ -112,32 +109,65 @@ function powerCutoffScheduler() {
         WHERE p.is_occupied = 1
           AND t.skip_auto_cutoff = 0
           AND rp.payment_status IN ('pending', 'partial')
-          AND (
-            rp.month_year < $1
-            OR 
-            (rp.month_year = $1 AND $2 > (t.committed_payment_date + $3))
-          )
-        GROUP BY p.id, p.room_number, t.name, t.phone
+        GROUP BY p.id, p.room_number, t.id, t.name, t.phone
         HAVING SUM(rp.total_due - COALESCE(rp.amount_paid, 0)) > 0
-      `, [monthYear, currentDay, settings.cutoff_grace_days]);
+      `);
 
-      for (const row of result.rows) {
+      const candidates = rpRes.rows.map(row => ({
+        id: row.id,
+        room_number: row.room_number,
+        name: row.name,
+        phone: row.phone,
+        pending_amount: row.pending_amount,
+        type: 'rent'
+      }));
+
+      // Add ledger fallback
+      const ledgerRes = await pool.query(`
+        SELECT p.id, p.room_number, t.id as tenant_id, t.name, t.phone,
+          (SELECT running_balance FROM transactions WHERE tenant_id = t.id ORDER BY date DESC, id DESC LIMIT 1) as ledger_balance
+        FROM properties p
+        JOIN tenants t ON p.id = t.property_id
+        WHERE p.is_occupied = 1
+          AND t.skip_auto_cutoff = 0
+          AND (SELECT running_balance FROM transactions WHERE tenant_id = t.id ORDER BY date DESC, id DESC LIMIT 1) > 0
+      `);
+
+      for (const row of ledgerRes.rows) {
+        if (!candidates.find(c => c.id === row.id)) {
+          candidates.push({
+            id: row.id,
+            room_number: row.room_number,
+            name: row.name,
+            phone: row.phone,
+            pending_amount: row.ledger_balance,
+            type: 'ledger'
+          });
+        }
+      }
+
+      if (candidates.length === 0) {
+        console.log('[Scheduler] No overdue candidates found at cutoff time.');
+        return;
+      }
+
+      for (const row of candidates) {
         try {
           const haResult = await homeAssistant.turnOff(row.id);
           if (haResult.success) {
             await pool.query(
               `INSERT INTO power_control_logs (property_id, action, triggered_by, reason, ha_response_status)
                VALUES ($1, 'OFF', 'AUTO', $2, 'success')`,
-              [row.id, `Unpaid bill past grace period (${settings.cutoff_grace_days} days)`]
+              [row.id, `Global Cutoff Time Hit (${currentTimeStr}): Unpaid balance ₹${row.pending_amount}`]
             );
 
             if (settings.cutoff_notify_whatsapp) {
-              const messageContent = `Your electricity for Room ${row.room_number} has been cut off as payment was not received within the ${settings.cutoff_grace_days}-day grace period. Please pay to restore power.`;
+              const messageContent = `Your electricity for Room ${row.room_number} has been cut off as payment was not received before the scheduled cutoff time. Please pay to restore power.`;
               await whatsappService.sendMessage(row.phone, messageContent);
             }
           }
         } catch (rowError) {
-          console.error(`[Scheduler Error] Failed to process cutoff for property ${row.id}:`, rowError);
+           console.error(`[Scheduler Error] Failed to process cutoff for property ${row.id}:`, rowError);
         }
       }
     } catch (error) {

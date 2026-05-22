@@ -34,12 +34,11 @@ function safeEqual(a, b) {
 const COOKIE_NAME = 'rm_auth';
 
 function getCookieOptions() {
-  const isProduction = process.env.NODE_ENV === 'production';
   const sessionHours = parseInt(process.env.SESSION_HOURS || '24', 10);
   return {
-    httpOnly: true,                          // JS cannot read this cookie — XSS safe
-    secure: isProduction,                    // HTTPS only in production
-    sameSite: isProduction ? 'strict' : 'lax',
+    httpOnly: true,   // JS cannot read this cookie — XSS safe
+    secure: false,    // HTTP-compatible (server runs without HTTPS on local network)
+    sameSite: 'lax',  // Works for same-site navigation over HTTP
     maxAge: sessionHours * 60 * 60 * 1000,  // milliseconds
     path: '/',
   };

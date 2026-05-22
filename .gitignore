@@ -1,0 +1,78 @@
+# =============================================
+# Dependencies - NEVER commit these
+# =============================================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.pnpm-debug.log*
+
+# =============================================
+# Environment Variables - NEVER commit secrets
+# =============================================
+.env
+.env.local
+.env.production
+.env.*.local
+backend/.env
+
+# =============================================
+# Frontend Build Output (built fresh on server)
+# =============================================
+frontend/dist/
+frontend/.vite/
+
+# =============================================
+# Database Files - KEEP schema, NOT the data
+# =============================================
+database/rentmanager.db
+database/*.db
+database/*.db-shm
+database/*.db-wal
+
+# =============================================
+# PM2 / Logs
+# =============================================
+logs/
+*.log
+.pm2/
+
+# =============================================
+# OS Generated Files
+# =============================================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+desktop.ini
+
+# =============================================
+# Editor & IDE
+# =============================================
+.vscode/
+.idea/
+*.swp
+*.swo
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# =============================================
+# Playwright / Browser Automation (very large)
+# =============================================
+**/playwright/.local-chromium/
+**/playwright/chromium*/
+playwright-report/
+test-results/
+
+# =============================================
+# Misc / Temp
+# =============================================
+*.tmp
+*.temp
+.cache/

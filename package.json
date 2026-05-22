@@ -1,0 +1,10 @@
+{
+  "name": "rentmanager",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "test": "npm run test --prefix backend && npm run test --prefix frontend",
+    "test:backend": "npm run test --prefix backend",
+    "test:frontend": "npm run test --prefix frontend"
+  }
+}

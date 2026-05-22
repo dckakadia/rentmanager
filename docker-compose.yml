@@ -1,0 +1,41 @@
+version: "3.8"
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: rentmanager_db
+    environment:
+      POSTGRES_USER: rentmanager
+      POSTGRES_PASSWORD: rentmanager_password
+      POSTGRES_DB: rentmanager_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - rentmanager_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rentmanager"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: rentmanager_pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@rentmanager.local
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - "5050:80"
+    networks:
+      - rentmanager_network
+    depends_on:
+      - postgres
+
+volumes:
+  postgres_data:
+
+networks:
+  rentmanager_network:
+    driver: bridge

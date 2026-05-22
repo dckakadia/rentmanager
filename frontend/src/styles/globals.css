@@ -1,0 +1,58 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* {
+  @apply box-border;
+}
+
+body {
+  @apply font-sans bg-gray-50 text-gray-900;
+}
+
+.card {
+  @apply bg-white rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] p-6 border border-gray-100 transition-all duration-300 hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)];
+}
+
+.glass {
+  @apply bg-white/70 backdrop-blur-md border border-white/20;
+}
+
+.btn {
+  @apply px-4 py-2 rounded-xl font-bold transition-all duration-200 active:scale-95;
+}
+
+.btn-primary {
+  @apply btn bg-blue-600 text-white shadow-lg shadow-blue-200 hover:bg-blue-700 hover:-translate-y-0.5;
+}
+
+.btn-danger {
+  @apply btn bg-red-600 text-white shadow-lg shadow-red-200 hover:bg-red-700 hover:-translate-y-0.5;
+}
+
+.btn-success {
+  @apply btn bg-green-600 text-white shadow-lg shadow-green-200 hover:bg-green-700 hover:-translate-y-0.5;
+}
+
+.table-container {
+  @apply bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden;
+}
+
+.table th {
+  @apply bg-gray-50/50 px-6 py-4 text-left text-xs font-black text-gray-400 uppercase tracking-widest;
+}
+
+.table td {
+  @apply px-6 py-4 border-b border-gray-50 text-sm text-gray-600;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-track {
+  @apply bg-transparent;
+}
+::-webkit-scrollbar-thumb {
+  @apply bg-gray-200 rounded-full hover:bg-gray-300 transition-colors;
+}

@@ -98,53 +98,8 @@ function powerCutoffScheduler() {
 
       console.log(`[Scheduler] Global cutoff time reached (${currentDateStr} ${currentTimeStr}). Running cutoff sweep...`);
 
-      // 2. Identify tenants who are overdue
-      const rpRes = await pool.query(`
-        SELECT
-          p.id, p.room_number, t.id as tenant_id, t.name, t.phone,
-          SUM(rp.total_due - COALESCE(rp.amount_paid, 0)) AS pending_amount
-        FROM properties p
-        JOIN tenants t ON p.id = t.property_id
-        JOIN rent_payments rp ON p.id = rp.property_id
-        WHERE p.is_occupied = 1
-          AND t.skip_auto_cutoff = 0
-          AND rp.payment_status IN ('pending', 'partial')
-        GROUP BY p.id, p.room_number, t.id, t.name, t.phone
-        HAVING SUM(rp.total_due - COALESCE(rp.amount_paid, 0)) > 0
-      `);
-
-      const candidates = rpRes.rows.map(row => ({
-        id: row.id,
-        room_number: row.room_number,
-        name: row.name,
-        phone: row.phone,
-        pending_amount: row.pending_amount,
-        type: 'rent'
-      }));
-
-      // Add ledger fallback
-      const ledgerRes = await pool.query(`
-        SELECT p.id, p.room_number, t.id as tenant_id, t.name, t.phone,
-          (SELECT running_balance FROM transactions WHERE tenant_id = t.id ORDER BY date DESC, id DESC LIMIT 1) as ledger_balance
-        FROM properties p
-        JOIN tenants t ON p.id = t.property_id
-        WHERE p.is_occupied = 1
-          AND t.skip_auto_cutoff = 0
-          AND (SELECT running_balance FROM transactions WHERE tenant_id = t.id ORDER BY date DESC, id DESC LIMIT 1) > 0
-      `);
-
-      for (const row of ledgerRes.rows) {
-        if (!candidates.find(c => c.id === row.id)) {
-          candidates.push({
-            id: row.id,
-            room_number: row.room_number,
-            name: row.name,
-            phone: row.phone,
-            pending_amount: row.ledger_balance,
-            type: 'ledger'
-          });
-        }
-      }
+      const { getOverdueCutoffCandidates } = require('../controllers/powerControl');
+      const candidates = await getOverdueCutoffCandidates(settings, false);
 
       if (candidates.length === 0) {
         console.log('[Scheduler] No overdue candidates found at cutoff time.');
@@ -153,12 +108,12 @@ function powerCutoffScheduler() {
 
       for (const row of candidates) {
         try {
-          const haResult = await homeAssistant.turnOff(row.id);
+          const haResult = await homeAssistant.turnOff(row.property_id);
           if (haResult.success) {
             await pool.query(
               `INSERT INTO power_control_logs (property_id, action, triggered_by, reason, ha_response_status)
                VALUES ($1, 'OFF', 'AUTO', $2, 'success')`,
-              [row.id, `Global Cutoff Time Hit (${currentTimeStr}): Unpaid balance ₹${row.pending_amount}`]
+              [row.property_id, `Global Cutoff Time Hit (${currentTimeStr}): Unpaid balance ₹${row.pending_amount}`]
             );
 
             if (settings.cutoff_notify_whatsapp) {
@@ -167,7 +122,7 @@ function powerCutoffScheduler() {
             }
           }
         } catch (rowError) {
-           console.error(`[Scheduler Error] Failed to process cutoff for property ${row.id}:`, rowError);
+           console.error(`[Scheduler Error] Failed to process cutoff for property ${row.property_id}:`, rowError);
         }
       }
     } catch (error) {

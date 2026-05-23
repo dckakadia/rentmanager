@@ -21,17 +21,19 @@ const homeAssistant = require('../config/homeAssistant');
  * See homeAssistant.js for the full NC wiring explanation.
  */
 
-async function getOverdueCutoffCandidates(settings, date = new Date()) {
-  // If manual cutoff date/time isn't set, do nothing
-  if (!settings?.cutoff_date || !settings?.cutoff_time) {
+async function getOverdueCutoffCandidates(settings, ignoreTimeCheck = false) {
+  // If not ignoring time check and manual cutoff date/time isn't set, do nothing
+  if (!ignoreTimeCheck && (!settings?.cutoff_date || !settings?.cutoff_time)) {
     return [];
   }
 
-  const cutoffDateTime = new Date(`${settings.cutoff_date}T${settings.cutoff_time}`);
-  
-  // If the current date/time hasn't reached the cutoff point, no one gets cut off
-  if (isNaN(cutoffDateTime.getTime()) || date < cutoffDateTime) {
-    return [];
+  if (!ignoreTimeCheck) {
+    const cutoffDateTime = new Date(`${settings.cutoff_date}T${settings.cutoff_time}`);
+    const date = new Date(); // Current time
+    // If the current date/time hasn't reached the cutoff point, no one gets cut off
+    if (isNaN(cutoffDateTime.getTime()) || date < cutoffDateTime) {
+      return [];
+    }
   }
 
   const threshold = settings?.cutoff_due_threshold !== undefined ? Number(settings.cutoff_due_threshold) : 0;
@@ -97,7 +99,8 @@ router.post('/trigger-cutoff', async (req, res) => {
     const settings = settingsRes.rows[0];
 
     // 2. Identify tenants who are past the grace period or simply unpaid
-    const overdueCandidates = await getOverdueCutoffCandidates(settings);
+    // For manual cutoff, we ignore the time check (we want to cut off now)
+    const overdueCandidates = await getOverdueCutoffCandidates(settings, true);
     
     if (overdueCandidates.length === 0) {
       return res.json({
@@ -191,7 +194,8 @@ router.get('/overdue-candidates', async (req, res) => {
     const settingsRes = await pool.query('SELECT * FROM settings WHERE id = 1');
     const settings = settingsRes.rows[0] || {};
 
-    const candidates = await getOverdueCutoffCandidates(settings);
+    // For preview, we ignore the time check to show who *would* be cut off
+    const candidates = await getOverdueCutoffCandidates(settings, true);
 
     res.json({
       success: true,
@@ -422,4 +426,7 @@ router.post('/:property_id/test', async (req, res) => {
   }
 });
 
-module.exports = router;
+module.exports = {
+  router,
+  getOverdueCutoffCandidates
+};
